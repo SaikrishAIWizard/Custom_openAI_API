@@ -70,42 +70,45 @@ async def format_product(request: Request):
     agent = Agent(
         role="Product Formatter",
         goal="Convert product listings into exact pipe-separated format",
-        backstory="Expert at clean product formatting.",
-        llm=llm
-    )
+        backstory="Expert at clean product formatting without price/sizes in wrong places.",
+        llm=llm)
 
     task = Task(
         description=(
             "Convert the product details into EXACTLY this format:\n"
             "Name | Price | Description | URLs | Sizes\n\n"
 
-            "TITLE RULES:\n"
-            "- Title MUST be: '1 pc MIX <Product Type> <Fabric>'\n"
-            "- NEVER include sizes in title\n"
-            "- Detect product type automatically\n"
-            "- Fabric: Cotton or Pure Cotton\n\n"
+            "TITLE RULES (STRICT):\n"
+            "- NEVER include sizes (M, L, XL, XXL, 36, 38, 40, etc.) in the title\n"
+            "- Title format MUST be:\n"
+            "  '1 pc <Brand> <Product Type> <Fabric>'\n"
+            "- Brand is ALWAYS: MIX\n"
+            "- Detect product type from input (shirt / tshirt / top / kurta / pants)\n"
+            "- Fabric must be Cotton or Pure Cotton\n\n"
 
             "PRICE RULE:\n"
-            "- Increase price by 20%\n\n"
+            "- Increase given price by 20% and round reasonably\n\n"
 
             "DESCRIPTION RULES:\n"
             "- Multi-line description\n"
-            "- No price or size words\n\n"
+            "- Do NOT mention price or sizes\n\n"
 
-            "SIZES RULE:\n"
-            "- Pants → 36,38,40\n"
-            "- Others → M,L,XL,XXL\n\n"
+            "SIZES RULE (BASED ON PRODUCT TYPE):\n"
+            "- If product type is pants → Sizes: 28,30,32,34,36,38,40,42\n"
+            "- Otherwise → Sizes: M,L,XL,XXL\n\n"
 
             "OUTPUT RULES:\n"
-            "- ONE single line only\n"
-            "- Pipe-separated\n"
-            "- No extra text\n\n"
+            "- Output ONLY one single line\n"
+            "- Fields must be pipe-separated (|)\n"
+            "- No extra text, no explanations\n\n"
 
-            f"Product Input:\n{product_input}"
+            "Product Input:\n"
+            f"{product_input}"
         ),
         agent=agent,
         expected_output="Single pipe-separated line"
     )
+
 
     crew = Crew(agents=[agent], tasks=[task])
     result = crew.kickoff()
