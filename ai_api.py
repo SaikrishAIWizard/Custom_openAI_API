@@ -1,124 +1,120 @@
 import os
 import json
-from typing import Optional
-
-from fastapi import FastAPI, Request, HTTPException, Body
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from crewai import LLM, Agent, Task, Crew
 from dotenv import load_dotenv
 
-# --------------------------------------------------
-# Environment setup
-# --------------------------------------------------
+# ---------------- ENV SETUP ----------------
 load_dotenv()
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 
+# ---------------- APP ----------------
 app = FastAPI(
     title="Product Formatter API",
-    version="1.0.0"
+    version="1.0.0",
+    description="Handles multiline product text safely without 422 errors"
 )
 
-# --------------------------------------------------
-# Initialize LLM (ONCE)
-# --------------------------------------------------
+# ---------------- LLM INIT (ONCE) ----------------
 llm = LLM(
     model="openai/openai/gpt-oss-120b",
     api_key=os.getenv("Custom_OPENAI_API_KEY"),
     base_url=os.getenv("OPENAI_COMPATIBLE_ENDPOINT"),
 )
 
-# --------------------------------------------------
-# Multiline-safe + Swagger-visible endpoint
-# --------------------------------------------------
+# ---------------- MAIN ENDPOINT ----------------
 @app.post("/format-product")
-async def format_product(
-    request: Request,
-    payload: Optional[dict] = Body(
-        default=None,
-        example={
-            "text": "Brand -MIX\nPURE COTTON\nPRICE - 399\nSIZE M L XL"
-        }
-    )
-):
-    try:
-        # 1️⃣ Prefer Swagger / proper JSON
-        if payload and isinstance(payload, dict):
-            product_input = payload.get("text", "")
-        else:
-            # 2️⃣ Fallback: raw body (broken JSON / copy-paste)
-            raw_body = await request.body()
-            product_input = raw_body.decode("utf-8", errors="ignore")
+async def format_product(request: Request):
+    """
+    Accepts:
+    - JSON: { "text": "multi line content" }
+    - OR raw text body (text/plain)
+    NEVER throws 422
+    """
 
-        # Normalize input
+    try:
+        raw_body = await request.body()
+
+        if not raw_body:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Empty request body"}
+            )
+
+        body_text = raw_body.decode("utf-8", errors="ignore").strip()
+
+        # Try JSON parsing first
+        try:
+            parsed = json.loads(body_text)
+            product_input = parsed.get("text", body_text)
+        except json.JSONDecodeError:
+            # If not JSON, treat whole body as text
+            product_input = body_text
+
         product_input = product_input.replace("\r\n", "\n").strip()
 
         if not product_input:
-            raise HTTPException(status_code=400, detail="No input provided")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No input text provided"}
+            )
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Invalid input: {str(e)}"}
+        )
 
-    # --------------------------------------------------
-    # CrewAI logic
-    # --------------------------------------------------
+    # -------- CrewAI Logic --------
     agent = Agent(
         role="Product Formatter",
-        goal="Convert product listings into strict pipe-separated format",
-        backstory="Expert at clean product formatting without sizes or price mistakes.",
+        goal="Convert product listings into exact pipe-separated format",
+        backstory="Expert at clean product formatting.",
         llm=llm
     )
 
     task = Task(
         description=(
-            "CRITICAL: Follow ALL rules strictly.\n\n"
-
-            "OUTPUT FORMAT (ONE LINE ONLY):\n"
+            "Convert the product details into EXACTLY this format:\n"
             "Name | Price | Description | URLs | Sizes\n\n"
 
-            "TITLE RULES (STRICT):\n"
-            "- NEVER include sizes (M, L, XL, XXL, 36, 38, 40, etc.) in title\n"
+            "TITLE RULES:\n"
             "- Title MUST be: '1 pc MIX <Product Type> <Fabric>'\n"
-            "- Brand is ALWAYS: MIX\n"
-            "- Detect product type: shirt / tshirt / top / kurta / pants\n"
+            "- NEVER include sizes in title\n"
+            "- Detect product type automatically\n"
             "- Fabric: Cotton or Pure Cotton\n\n"
 
             "PRICE RULE:\n"
-            "- Increase mentioned price by 20%\n"
-            "- Return final numeric price only\n\n"
+            "- Increase price by 20%\n\n"
 
             "DESCRIPTION RULES:\n"
             "- Multi-line description\n"
-            "- DO NOT mention price or sizes\n\n"
+            "- No price or size words\n\n"
 
             "SIZES RULE:\n"
-            "- If product type is pants → 36,38,40\n"
-            "- Else → M,L,XL,XXL\n\n"
+            "- Pants → 36,38,40\n"
+            "- Others → M,L,XL,XXL\n\n"
 
             "OUTPUT RULES:\n"
-            "- One single line only\n"
-            "- Pipe-separated fields\n"
-            "- No explanations\n\n"
+            "- ONE single line only\n"
+            "- Pipe-separated\n"
+            "- No extra text\n\n"
 
-            "PRODUCT INPUT:\n"
-            f"{product_input}"
+            f"Product Input:\n{product_input}"
         ),
         agent=agent,
         expected_output="Single pipe-separated line"
     )
 
-    crew = Crew(
-        agents=[agent],
-        tasks=[task]
-    )
-
+    crew = Crew(agents=[agent], tasks=[task])
     result = crew.kickoff()
 
     return {
         "formatted_text": str(result).strip()
     }
 
-# --------------------------------------------------
-# Health Check
-# --------------------------------------------------
+# ---------------- HEALTH CHECK ----------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
