@@ -68,46 +68,28 @@ async def format_product(request: Request):
 
     # -------- CrewAI Logic --------
     agent = Agent(
-        role="Product Formatter",
-        goal="Convert product listings into exact pipe-separated format",
-        backstory="Expert at clean product formatting without price/sizes in wrong places.",
-        llm=llm)
+    role="Product Formatter",
+    goal="Format products accurately by product type",
+    backstory="E-commerce expert - shirts get letters, pants get numbers",
+    llm=llm)
 
     task = Task(
         description=(
-            "Convert the product details into EXACTLY this format:\n"
-            "Name | Price | Description | URLs | Sizes\n\n"
-
-            "TITLE RULES (STRICT):\n"
-            "- NEVER include sizes (M, L, XL, XXL, 36, 38, 40, etc.) in the title\n"
-            "- Title format MUST be:\n"
-            "  '1 pc <Brand> <Product Type> <Fabric>'\n"
-            "- Brand is ALWAYS: MIX\n"
-            "- Detect product type from input (shirt / tshirt / top / kurta / pants)\n"
-            "- Fabric must be Cotton or Pure Cotton\n\n"
-
-            "PRICE RULE:\n"
-            "- Increase given price by 20% and round reasonably\n\n"
-
-            "DESCRIPTION RULES:\n"
-            "- Multi-line description\n"
-            "- Do NOT mention price or sizes\n\n"
-
-            "SIZES RULE (BASED ON PRODUCT TYPE):\n"
-            "- If product type is pants → Sizes: 28,30,32,34,36,38,40,42\n"
-            "- Otherwise → Sizes: M,L,XL,XXL\n\n"
-
-            "OUTPUT RULES:\n"
-            "- Output ONLY one single line\n"
-            "- Fields must be pipe-separated (|)\n"
-            "- No extra text, no explanations\n\n"
-
-            "Product Input:\n"
+            f"Output ONLY: Name | Price | Description | URLs | Sizes\n\n"
+            f"TITLE: '1 pc MIX [Type] Cotton'\n"
+            f"Type = Pants ONLY if input contains: pants/trackpant/trouser/pyjama\n"
+            f"Type = Shirt for ALL OTHER products (even with numbers)\n\n"
+            f"Price: ×1.2 rounded\n"
+            f"Description: Multi-line, NO price/sizes\n\n"
+            f"SIZES:\n"
+            f"IF 'pants/trackpant/trouser/pyjama' in text → 28,30,32,34,36,38,40\n"
+            f"ELSE → M,L,XL,XXL (numbers in shirts = ignore)\n\n"
             f"{product_input}"
         ),
         agent=agent,
-        expected_output="Single pipe-separated line"
+        expected_output="Pipe-separated line only"
     )
+
 
 
     crew = Crew(agents=[agent], tasks=[task])
