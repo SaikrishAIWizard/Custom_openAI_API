@@ -372,7 +372,7 @@ def get_main_menu():
     keyboard = [
         [InlineKeyboardButton("👕 Single PC (Pipe)", callback_data="mode_single")],
         [InlineKeyboardButton("📦 Combo Pack (Pipe)", callback_data="mode_combo")],
-        [InlineKeyboardButton("🪡 Artisan Craft Formatter", callback_data="mode_artisan")]
+        [InlineKeyboardButton("🪡 Artisan Craft Formatter", callback_data="mode_artisan")],
         [InlineKeyboardButton("📸 Instagram Post", callback_data="mode_instagram")],
         [InlineKeyboardButton("🧹 Reset", callback_data="reset")]
     ]
