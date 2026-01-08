@@ -141,7 +141,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 result = run_instagram_crew(combined_data)
             
-            await update.message.reply_text(f"✨ **Output:**\n\n{result}")
+            await update.message.reply_text(f"{result}")
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {str(e)}")
         
