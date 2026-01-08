@@ -39,7 +39,7 @@ def run_formatter_crew(product_input: str):
             "Name | Price | Description | URLs | Sizes\n\n"
             "STRICT RULES:\n"
             "1. NAME: Format as '<Quantity> <Brand> <Product Type> <Fabric>'. Use 1 for Quantity if not specified.\n"
-            "2. PRICE: Find the numerical price, add 20%, and output ONLY the whole number. No symbols.\n"
+            "2. PRICE: Find the numerical price, add 15%, and output ONLY the whole number. No symbols.\n"
             "3. DESCRIPTION: Rewrite into a premium, engaging description with emojis. \n"
             "   ⚠️ ABSOLUTE FORBIDDEN: Do NOT include prices, currency, sizes, or shipping info in the description. \n"
             "   Use actual physical line breaks for each sentence. Do NOT use '\\n' text.\n"
