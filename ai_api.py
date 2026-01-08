@@ -1,21 +1,22 @@
 import os
 import json
 import asyncio
+import httpx  # Added for keep-alive pings
+from contextlib import asynccontextmanager # Added for Lifespan
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from crewai import LLM, Agent, Task, Crew
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ChatAction
-from telegram import BotCommand
 
 # ---------------- ENV SETUP ----------------
 load_dotenv()
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 
-app = FastAPI(title="Product Multi-Agent API & Bot")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+APP_URL = os.getenv("APP_URL") # Add this to your environment variables (e.g., https://your-bot.onrender.com)
 user_sessions = {}
 
 llm = LLM(
@@ -24,7 +25,64 @@ llm = LLM(
     base_url=os.getenv("OPENAI_COMPATIBLE_ENDPOINT"),
 )
 
+# ---------------- KEEP ALIVE LOGIC ----------------
+async def keep_alive_task():
+    """Background task to ping the server and keep it awake"""
+    if not APP_URL:
+        print("⚠️ APP_URL not set. Keep-alive background task skipped.")
+        return
+
+    async with httpx.AsyncClient() as client:
+        while True:
+            await asyncio.sleep(600)  # Ping every 10 minutes
+            try:
+                response = await client.get(f"{APP_URL}/health")
+                print(f"📡 Keep-alive ping sent to {APP_URL}. Status: {response.status_code}")
+            except Exception as e:
+                print(f"❌ Keep-alive ping failed: {e}")
+
+# ---------------- LIFESPAN HANDLER (Replaces on_event) ----------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- STARTUP LOGIC ---
+    # 1. Initialize Telegram Application
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # 2. Set Bot Commands
+    await application.bot.set_my_commands([
+        BotCommand("start", "🚀 Start the Bot"),
+        BotCommand("menu", "📋 Dashboard")
+    ])
+
+    # 3. Add Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("menu", start))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    
+    # 4. Start Bot
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    
+    # 5. Start Keep-Alive Task
+    keep_alive_loop = asyncio.create_task(keep_alive_task())
+    
+    print("🚀 Bot is running and Keep-Alive is active.")
+    
+    yield  # --- APP IS RUNNING ---
+    
+    # --- SHUTDOWN LOGIC ---
+    keep_alive_loop.cancel()
+    await application.updater.stop()
+    await application.stop()
+    await application.shutdown()
+
+# Initialize FastAPI with the lifespan handler
+app = FastAPI(title="Product Multi-Agent API & Bot", lifespan=lifespan)
+
 # ---------------- AGENTS & LOGIC ----------------
+# (Keep your run_formatter_crew and run_instagram_crew logic here as they were)
 
 def run_formatter_crew(product_input: str):
     agent = Agent(
@@ -81,6 +139,7 @@ def run_instagram_crew(product_input: str):
     return result.replace("\\n", "\n").replace('"', '').strip()
 
 # ---------------- TELEGRAM UI & HANDLERS ----------------
+# (Keep your get_main_menu, start, handle_callback, and handle_message here as they were)
 
 def get_main_menu():
     keyboard = [[InlineKeyboardButton("📊 Format (Pipe)", callback_data="mode_format")],
@@ -97,16 +156,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()
-
     if query.data == "mode_format":
         user_sessions[user_id] = {"description": "", "urls": "", "step": "desc", "mode": "format"}
         await query.edit_message_text("🛠 **Pipe Formatter**\nStep 1/2: Paste Product Details")
-    
     elif query.data == "mode_instagram":
-        # SINGLE STEP for Instagram
         user_sessions[user_id] = {"description": "", "urls": "", "step": "insta_single", "mode": "instagram"}
         await query.edit_message_text("📸 **Instagram Post Creator**\nPaste all product info here:")
-    
     elif query.data == "reset":
         user_sessions[user_id] = {"description": "", "urls": "", "step": None, "mode": None}
         await query.edit_message_text("Reset complete. Select tool:", reply_markup=get_main_menu())
@@ -115,12 +170,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     session = user_sessions.get(user_id)
-
     if not session or session["step"] is None:
         await update.message.reply_text("Please select a mode:", reply_markup=get_main_menu())
         return
 
-    # --- FORMATTER MODE (2 Steps) ---
     if session["mode"] == "format":
         if session["step"] == "desc":
             session["description"] = text
@@ -138,7 +191,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session["step"] = None
             await update.message.reply_text("--- ✅ Done ---", reply_markup=get_main_menu())
 
-    # --- INSTAGRAM MODE (1 Step) ---
     elif session["mode"] == "instagram":
         if session["step"] == "insta_single":
             await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
@@ -150,61 +202,5 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session["step"] = None
             await update.message.reply_text("--- ✨ Done ---", reply_markup=get_main_menu())
 
-# ---------------- STARTUP ----------------
-@app.on_event("startup")
-async def start_bot():
-
-    # Initialize the application
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    
-    # 1. SET BOT COMMANDS (The part you requested)
-    # This makes the "Menu" button appear in the bottom left of the chat
-    await application.bot.set_my_commands([
-        BotCommand("start", "🚀 Start the Bot"),
-        #BotCommand("start", "📋 Dashboard")
-    ])
-
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-
 @app.get("/health")
 def health(): return {"status": "ok"}
-
-
-# # ... (rest of your imports and agent logic remain the same) ...
-
-# # ---------------- STARTUP ----------------
-# @app.on_event("startup")
-# async def start_bot():
-#     # Initialize the application
-#     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    
-#     # 1. SET BOT COMMANDS (The part you requested)
-#     # This makes the "Menu" button appear in the bottom left of the chat
-#     from telegram import BotCommand
-#     await application.bot.set_my_commands([
-#         BotCommand("start", "🚀 Start the Bot"),
-#         BotCommand("menu", "📋 Dashboard")
-#     ])
-
-#     # 2. ADD HANDLERS
-#     application.add_handler(CommandHandler("start", start))
-#     application.add_handler(CommandHandler("menu", start)) # Link /menu to the dashboard
-#     application.add_handler(CallbackQueryHandler(handle_callback))
-#     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    
-#     # 3. START BOT
-#     await application.initialize()
-#     await application.start()
-#     await application.updater.start_polling()
-    
-#     print("🚀 Bot is running with /menu command active.")
-
-# @app.get("/health")
-# def health(): 
-#     return {"status": "ok", "commands_active": True}
