@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ChatAction
+from telegram import BotCommand
 
 # ---------------- ENV SETUP ----------------
 load_dotenv()
@@ -152,6 +153,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------- STARTUP ----------------
 @app.on_event("startup")
 async def start_bot():
+
+    # Initialize the application
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # 1. SET BOT COMMANDS (The part you requested)
+    # This makes the "Menu" button appear in the bottom left of the chat
+    await application.bot.set_my_commands([
+        BotCommand("start", "🚀 Start the Bot"),
+        #BotCommand("start", "📋 Dashboard")
+    ])
+
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
@@ -162,3 +174,37 @@ async def start_bot():
 
 @app.get("/health")
 def health(): return {"status": "ok"}
+
+
+# # ... (rest of your imports and agent logic remain the same) ...
+
+# # ---------------- STARTUP ----------------
+# @app.on_event("startup")
+# async def start_bot():
+#     # Initialize the application
+#     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+#     # 1. SET BOT COMMANDS (The part you requested)
+#     # This makes the "Menu" button appear in the bottom left of the chat
+#     from telegram import BotCommand
+#     await application.bot.set_my_commands([
+#         BotCommand("start", "🚀 Start the Bot"),
+#         BotCommand("menu", "📋 Dashboard")
+#     ])
+
+#     # 2. ADD HANDLERS
+#     application.add_handler(CommandHandler("start", start))
+#     application.add_handler(CommandHandler("menu", start)) # Link /menu to the dashboard
+#     application.add_handler(CallbackQueryHandler(handle_callback))
+#     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    
+#     # 3. START BOT
+#     await application.initialize()
+#     await application.start()
+#     await application.updater.start_polling()
+    
+#     print("🚀 Bot is running with /menu command active.")
+
+# @app.get("/health")
+# def health(): 
+#     return {"status": "ok", "commands_active": True}
