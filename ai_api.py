@@ -67,7 +67,7 @@ def run_instagram_crew(product_input: str):
             "Transform the input into a creative Instagram caption.\n"
             "Header: ✨ PREMALATHA COLLECTIONS: NEW ARRIVALS ✨\n"
             "Style: High-energy, emojis (🛍️, 🔥, 🧵, 💎). Use physical line breaks for readability.\n"
-            "Price: Include the final calculated price (Original + 20%).\n"
+            "Price: Include the final calculated price (Original).\n"
             "Branding: Mention 'Premium Quality Guaranteed' and 'Stock Moving Fast!'.\n"
             "Footer: DM to order! 📥 #PremalathaCollections #PremiumFashion #NewArrivals\n"
             "⚠️ OUTPUT: Final caption ONLY. No intro or internal notes.\n\n"
