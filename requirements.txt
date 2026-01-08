@@ -3,3 +3,4 @@ uvicorn
 crewai
 python-dotenv
 litellm
+python-telegram-bot
