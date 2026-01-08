@@ -271,13 +271,13 @@ def run_artisan_craft_formatter(product_input: str):
         role="Handmade & Embroidery Catalog Specialist",
         goal=(
             "Extract and format artisanal, handmade, or embroidered products "
-            "into a professional database-ready format with ZERO size values."
+            "into a professional database-ready format"
         ),
         backstory=(
             "You are an expert in luxury textiles and traditional embroidery. "
             "You understand the value of hand-crafted work and translate raw "
             "artisan descriptions into elegant, structured listings. You "
-            "meticulously follow formatting rules and ensure size fields are blank."
+            "meticulously follow formatting rules and ensure size fied have default value FreeSize."
         ),
         llm=llm
     )
@@ -314,8 +314,9 @@ def run_artisan_craft_formatter(product_input: str):
             "- Include image/video URLs, comma-separated, no spaces.\n\n"
 
             "SIZES:\n"
-            "- ALWAYS LEAVE THIS EMPTY. Do not put 'NA', 'None', or any text.\n"
-            "- The line must end with a pipe and nothing else if Sizes is the last field.\n\n"
+            "- DO NOT leave this field empty.\n"
+            "- ALWAYS output the exact word 'FreeSize' as the default value.\n"
+            "- This ensures the website identifies it as a single-size handmade item.\n"
 
             "ABSOLUTE PROHIBITIONS:\n"
             "- No markdown, no quotes, no explanations.\n"
