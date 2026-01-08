@@ -266,6 +266,82 @@ def run_instagram_crew(product_input: str):
     )
 
 
+def run_artisan_craft_formatter(product_input: str):
+    agent = Agent(
+        role="Handmade & Embroidery Catalog Specialist",
+        goal=(
+            "Extract and format artisanal, handmade, or embroidered products "
+            "into a professional database-ready format with ZERO size values."
+        ),
+        backstory=(
+            "You are an expert in luxury textiles and traditional embroidery. "
+            "You understand the value of hand-crafted work and translate raw "
+            "artisan descriptions into elegant, structured listings. You "
+            "meticulously follow formatting rules and ensure size fields are blank."
+        ),
+        llm=llm
+    )
+
+    task = Task(
+        description=(
+            "Convert the handmade/embroidery product information below into **ONE SINGLE LINE** "
+            "using the EXACT pipe-separated format:\n\n"
+            "Name | Price | Description | URLs | Sizes\n\n"
+
+            "STRICT & NON-NEGOTIABLE RULES:\n"
+            "1. OUTPUT must be exactly ONE line only.\n"
+            "2. THE SIZES FIELD MUST ALWAYS BE EMPTY (Leave it blank after the last pipe).\n\n"
+
+            "FIELD RULES:\n"
+            "NAME:\n"
+            "- Format strictly as: 'Handmade <Product Type> with <Embroidery/Work Type>'\n"
+            "- Example: 'Handmade Cushion Cover with Zardosi Work'\n\n"
+
+            "PRICE:\n"
+            "- Identify the base price from input\n"
+            "- Increase it by 20% and round to the nearest whole number\n"
+            "- Output digits only (no symbols)\n\n"
+
+            "DESCRIPTION:\n"
+            "- Write an elegant, craft-focused description using emoji bullet points\n"
+            "- MUST be 5–8 short lines using real line breaks\n"
+            "- Focus on: Intricate embroidery details, fabric quality, artisan skill, "
+            "vibrant colors, and care instructions (Dry clean/Hand wash).\n"
+            "- Use sophisticated, buyer-friendly language.\n"
+            "- ABSOLUTELY DO NOT include sizes or dimensions here.\n\n"
+
+            "URLS:\n"
+            "- Include image/video URLs, comma-separated, no spaces.\n\n"
+
+            "SIZES:\n"
+            "- ALWAYS LEAVE THIS EMPTY. Do not put 'NA', 'None', or any text.\n"
+            "- The line must end with a pipe and nothing else if Sizes is the last field.\n\n"
+
+            "ABSOLUTE PROHIBITIONS:\n"
+            "- No markdown, no quotes, no explanations.\n"
+            "- DO NOT guess or add any size measurements.\n\n"
+
+            f"INPUT DATA:\n{product_input}"
+        ),
+        agent=agent,
+        expected_output="One single pipe-separated line ending with an empty size field."
+    )
+
+    result = Crew(
+        agents=[agent],
+        tasks=[task]
+    ).kickoff()
+
+    return (
+        str(result)
+        .replace("\\n", " ")
+        .replace('"', "")
+        .replace("Output:", "")
+        .replace("Result:", "")
+        .strip()
+    )
+
+
 # ---------------- LIFESPAN MANAGER ----------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -296,6 +372,7 @@ def get_main_menu():
     keyboard = [
         [InlineKeyboardButton("👕 Single PC (Pipe)", callback_data="mode_single")],
         [InlineKeyboardButton("📦 Combo Pack (Pipe)", callback_data="mode_combo")],
+        [InlineKeyboardButton("🪡 Artisan Craft Formatter", callback_data="mode_artisan")]
         [InlineKeyboardButton("📸 Instagram Post", callback_data="mode_instagram")],
         [InlineKeyboardButton("🧹 Reset", callback_data="reset")]
     ]
@@ -328,8 +405,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     await query.answer()
 
-    if query.data in ["mode_single", "mode_combo"]:
-        mode = "single" if query.data == "mode_single" else "combo"
+    if query.data in ["mode_single", "mode_combo", "mode_artisan"]:
+        mode = "single" if query.data == "mode_single" else "artisan" if query.data == "mode_artisan" else "combo"
         user_sessions[user_id] = {"description": "", "urls": "", "step": "desc", "mode": mode}
         await query.edit_message_text(f"🛠 **{mode.upper()} Mode**\nStep 1/2: Paste Product Details:")
     elif query.data == "mode_instagram":
@@ -346,7 +423,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text
-    if session["mode"] in ["single", "combo"]:
+    if session["mode"] in ["single", "combo", "artisan"]:
         if session["step"] == "desc":
             session["description"] = text
             session["step"] = "urls"
@@ -356,7 +433,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
             combined = f"DATA: {session['description']}\nURLS: {session['urls']}"
             try:
-                res = run_single_formatter(combined) if session["mode"] == "single" else run_combo_formatter(combined)
+                res = run_artisan_craft_formatter(combined) if session["mode"] == "artisan" else (run_single_formatter(combined) if session["mode"] == "single" else run_combo_formatter(combined))
                 await update.message.reply_text(res)
             except Exception as e:
                 await update.message.reply_text(f"Error: {e}")
